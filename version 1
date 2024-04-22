@@ -1,0 +1,216 @@
+library('lhs')
+library(rgl)
+library(readxl)
+X2 <- read_excel("2.xlsx")
+
+#拉丁超立方抽样
+input <- 26 ##抽样变量数量
+samplenumber <- 1000 ##抽样次数
+range <- 
+  matrix(c(0.2,0.4,0.2,0.4,0.2,0.4,0.2,0.4,-180,0,
+           0.1,0.6,0.1,0.55,1,2.8,0.2,0.6,0.3,0.52,
+           0.3,0.52,0.3,0.52,0.52,0.60,2,6,8,15,8,15,
+           4.5,13.5,30,32,2,25,1.12,10,8,25,5,24,13,20,
+           5,40,13,20,1,1.5),nrow=input,ncol=2,byrow=TRUE)##创建一个26*2的矩阵设定每个变量的上下限范围
+rangeresult <- matrix(0,nrow=samplenumber,ncol=input)##创建空白矩阵放入范围变量
+set.seed(20240417)## 设置随机种子以确保结果的可重复性
+modelinput <- randomLHS(samplenumber,input)
+modelinput
+##将输入的原始单位转化为实际单位
+for (i in 1:input){
+  rangeresult[,i] <- qunif(modelinput[,i],min=range[i,1],max=range[i,2])
+}
+rangeresult
+#抽样结果检查与输出
+dim(rangeresult)##查看矩阵维度
+summary(rangeresult)#查看每一列的摘要统计信息
+colnames(rangeresult) <- c("NWWR","SWWR","WWWR","EWWR","BO","WallK","RoofK","WindowK","FSK",
+                           "EWSHGC","WWSHGC","SWSHGC","NWSHGC","LRB","LCB","LEB","LTH","BpCRB",
+                           "BpCCB","BpCEB","BpCTH","EPRB","EPCB","EPEB","EPTH","ACH")
+write.csv(rangeresult,'inputnew.csv',row.names = TRUE)
+for(ids in 1:samplenumber){
+  flush.console()
+  print(ids)
+  latin <- ""
+  NWWR <- rangeresult[ids,1]
+  SWWR <- rangeresult[ids,2]
+  WWWR <- rangeresult[ids,3]
+  EWWR <- rangeresult[ids,4]
+  BO <- rangeresult[ids,5]##0 is north
+  WallK <- rangeresult[ids,6]
+  RoofK <- rangeresult[ids,7]
+  WindowK <-rangeresult[ids,8]
+  FSK <- rangeresult[ids,9]
+  EWSHGC <- rangeresult[ids,10]
+  WWSHGC <- rangeresult[ids,11]
+  SWSHGC <- rangeresult[ids,12]
+  NWSHGC <- rangeresult[ids,13]
+  LRB <- rangeresult[ids,14]
+  LCB <- rangeresult[ids,15]
+  LEB <- rangeresult[ids,16]
+  LTH <- rangeresult[ids,17]
+  BpCRB <- rangeresult[ids,18]
+  BpCCB <- rangeresult[ids,19]
+  BpCEB <- rangeresult[ids,20]
+  BpCTH <- rangeresult[ids,21]
+  EPRB <- rangeresult[ids,22]
+  EPCB <- rangeresult[ids,23]
+  EPEB <- rangeresult[ids,24]
+  EPTH <- rangeresult[ids,25]
+  ACH <- rangeresult[ids,26]
+  wallthick <- 0.03/WallK-0.0191 ## unti:m insulation thickenss for wall
+  roofthick <- 0.03/RoofK-0.0248 ## unit:m insulation thickenss for roof
+  groundthick <- 0.03/FSK-0.008 ## unit:m insulation thickenss for ground  ##zone names 
+  
+  #分区建模部分代码
+  set.seed(123)  # 设置随机种子以确保结果的可重复性（可选）  
+  # 使用sample函数从X2中随机抽取1000行  
+  random_rows <- X2[sample(nrow(shuju), 1000), ]
+  random_rows
+  dim(random_rows);names(random_rows)
+  typename <- random_rows[,3]
+  buildingname <- random_rows[,1]
+  height <- random_rows[,2]
+  level <- height/3
+  
+  origin <- c(0,0,0)
+  
+  ##construction names
+  eroof <- "Exterior Roof"
+  eloor <- "Exterior Floor"
+  iceiling <- "Interior Ceiling"
+  ewall <- "Exterior Wall"
+  iwall <- "Interior Wall"
+  exwin <- "Exterior Window"
+  startline = 1
+  latin[c(startline + 1)] = paste("GlobalGeometryRules,", sep = "")
+  latin[c(startline + 2)] = paste("UpperLeftCorner,         !- Starting Vertex Position", sep = "")
+  latin[c(startline + 3)] = paste("Counterclockwise,        !- Vertex Entry Direction", sep = "")
+  latin[c(startline + 4)] = paste("Relative,                !- Coordinate System", sep = "")
+  latin[c(startline + 4)] = paste("Relative,                 !- Coordinate System", sep = "")
+  latin[c(startline  +  5)]  =  paste("Relative,                 !-  Daylighting  Reference  Point Coordinate System", sep = "")
+  latin[c(startline  +  6)]  =  paste("Relative;                 !-  Rectangular  Surface  Coordinate System", sep = "") 
+  ## window thermal properties
+  latin[c(length(latin)  +  1)]  <-  paste("!-    ===========   ALL  OBJECTS  IN  CLASS: WINDOWMATERIAL:SIMPLEGLAZINGSYSTEM ===========", sep = "")
+  latin[c(length(latin) + 1)] <- paste("WindowMaterial:SimpleGlazingSystem,", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    simple windows,          !- Name", sep = "")
+  latin[c(length(latin) + 1)] <- paste(WindowK, ",                !- U-Factor {W/m2-K}", sep = "")
+  latin[c(length(latin) + 1)] <- paste(EWSHGC, ";           !- Solar Heat Gain Coefficient", sep = "")
+  latin[c(length(latin) + 1)] <- paste(WWSHGC, ";           !- Solar Heat Gain Coefficient", sep = "")
+  latin[c(length(latin) + 1)] <- paste(SWSHGC, ";           !- Solar Heat Gain Coefficient", sep = "")
+  latin[c(length(latin) + 1)] <- paste(NWSHGC, ";           !- Solar Heat Gain Coefficient", sep = "")
+  ## wall thickness of insulation
+  latin[c(length(latin) + 1)] <- paste("Material,", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    wall insulation board,   !- Name", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    MediumRough,             !- Roughness", sep = "")
+  latin[c(length(latin) + 1)] <- paste(wallthick, ",                   !- Thickness {m}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    0.03,           !- Conductivity {W/m-K}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    43,         !- Density {kg/m3}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    1210;       !- Specific Heat {J/kg-K}", sep = "")
+  ## window thermal properties
+  latin[c(length(latin) + 1)] <- paste("Material,", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    roof insulation board,   !- Name", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    MediumRough,             !- Roughness", sep = "")
+  latin[c(length(latin) + 1)] <- paste(roofthick, ",                  !- Thickness {m}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    0.03,            !- Conductivity {W/m-K}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    43,             !- Density {kg/m3}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    1210;           !- Specific Heat {J/kg-K}", sep = "")
+  ## window thermal properties
+  latin[c(length(latin) + 1)] <- paste("Material,", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    ground  insulation board,!- Name", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    MediumRough,             !- Roughness", sep = "")
+  latin[c(length(latin) + 1)] <- paste(groundthick, ",           !- Thickness {m}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    0.03,         !- Conductivity {W/m-K}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    43,            !- Density {kg/m3}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    1210;      !- Specific Heat {J/kg-K}", sep = "")
+  ##  Building orientation
+  latin[c(length(latin) + 1)] <- paste("Building,", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    Untitled,                !- Name", sep = "")
+  latin[c(length(latin) + 1)] <- paste(BO,",            !- North Axis {deg}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    City,                    !- Terrain", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    0.04,  !- Loads Convergence Tolerance Value", sep = "")
+  latin[c(length(latin) + 1)] <- paste("  0.4, !- Temperature Convergence Tolerance Value {deltaC}", sep = "")
+  latin[c(length(latin) + 1)] <- paste("     FullInteriorAndExterior, !- Solar Distribution", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    25,  !- Maximum Number of Warmup Days", sep = "")
+  latin[c(length(latin) + 1)] <- paste("    ;   !- Minimum Number of Warmup Days", sep = "")
+  
+  forsideshere_x_cols<-seq(from=4,to = min(50,ncol(random_rows)),by=2)
+  forsideshere_y_cols<-seq(from=5,to = min(51,ncol(random_rows)),by=2)
+  extracted_X_cols<-random_rows[,forsideshere_x_cols]
+  extracted_y_cols<-random_rows[,forsideshere_y_cols]
+  sideshere<- apply(extracted_X_cols, 1, function(row) sum(!is.na(row)))
+  pointdata<-random_rows[,-c(2,3)]
+  # 计算每行的平均值（仅考虑4到24列）  
+  centroidx <- apply(extracted_X_cols[, 4:24], 1, function(row) {  
+    # 过滤掉可能的NA值  
+    row_values <- row[!is.na(row)]  
+    # 计算平均值（如果row_values不为空）  
+    if (length(row_values) > 0) {  
+      return(mean(row_values))  
+    } else {  
+      return(NA) # 如果整行都是NA，则返回NA  
+    }  
+  })
+  centroidy <-apply(extracted_y_cols[,4:24],1,function(row){
+    row_values<- row[!is.na(row)]
+    if (length(row_values)>0){
+      return(mean(row_values))
+    }else{
+      return(NA)
+    }
+  })
+  for(i in level:level){
+    for(j in 1 :(as.numeric(sideshere))){
+      zonename <-paste("zone",typename,i,"-",j,sep = "")
+      v1<-c(pointdata[(j)*2+2],pointdata[(j)*2+3],height[i])
+      v2<-c(pointdata[(j-1)*2+2],pointdata[(j-1)*2+3],0)
+      v3<-c(pointdata[(j)*2+2],pointdata[(j)*2+3],0)
+      v4<-c(pointdata[(j-1)*2+2],pointdata[(j-1)*2+3],height[i])
+      if(v2[1]>centroidx){
+        v21<-v2[1]-SI*abs(v2[1]-centroidx)
+      }else{v21<-v2[1]+SI*abs(v2[1]-centroidx)}
+      if(v2[2]>centroidy){
+        v22<-v2[2]-SI*abs(v2[2]-centroidy)
+      }else{v22<-v2[2]+SI*abs(v2[2]-centroidy)}
+      vn2<-c(v21,v22,0)
+      if(v3[1]>centroidx){
+        v31<-v3[1]-SI*abs(v3[1]-centroidx)
+      }else{v31<-v3[1]+SI*abs(v3[1]-centroidx)}
+      if(v3[2]>centroidy){
+        v32<-v3[2]-SI*abs(v3[2]-centroidy)
+      }else{v32<-v3[2]+SI*abs(v3[2]-centroidy)}
+      vn3<-c(v31,v32,0)
+      #write energyplus code
+      latin[c(length(latin)+1)]<-paste("BuildingSurface:Detailed,",sep = "")
+      latin[c(length(latin)+1)]<-paste("Roof",i,j,",       !-Name",sep="")
+      latin[c(length(latin)+1)]<-paste("    Roof,    !-Surface Type",sep="")
+      latin[c(length(latin)+1)]<-paste(eroof,",  !-Construction Name",sep = "")
+      latin[c(length(latin)+1)]<-paste(zonename,",  !-Zone Name",sep = "")
+      if (location == "Normal"|location=="top"){
+        latin[c(length(latin)+1)]<-paste("Outdoors,     !-Outside Boundary Condition",sep = "")
+        latin[c(length(latin)+1)]<-paste(",  !-Outside Boundary Condition Object",sep = "")
+        latin[c(length(latin)+1)]<-paste("  SunExposed,     !-Sun Exposure",sep="")
+        latin[c(length(latin)+1)]<-paste("  WindExposed,  !-Wind Exposure",sep = "")
+      }
+      if (location == "middle"|location=="main"|location=="bottom"){
+        latin[c(length(latin)+1)]<-paste("Adiabatic,     !-Outside Boundary Condition",sep = "")
+        latin[c(length(latin)+1)]<-paste("Roof",i,j,",  !-Outside Boundary Condition Object",sep = "")
+        latin[c(length(latin)+1)]<-paste("  NoSun,     !-Sun Exposure",sep="")
+        latin[c(length(latin)+1)]<-paste("  NoWind,  !-Wind Exposure",sep = "")
+      }
+      latin[c(length(latin)+1)]<-paste("   ,  !-View Factor to Ground",sep = "")
+      latin[c(length(latin)+1)]<-paste(4,",    !-Number of Vertices",sep = "")
+      latin[c(length(latin)+1)]<-paste(v2[1],v2[2],height[i],"  !-X,Y,Z==>Vertex 1{m}",sep = ",")
+      latin[c(length(latin)+1)]<-paste(vn2[1],vn2[2],height[i],"  !-X,Y,Z==>Vertex 2{m}",sep = ",")
+      latin[c(length(latin)+1)]<-paste(vn3[1],vn3[2],height[i],"  !-X,Y,Z==>Vertex 3{m}",sep = ",")
+      latin[c(length(latin)+1)]<-paste(v3[1],v3[2],height[i],"  !-X,Y,Z==>Vertex 4{m}",sep = ",")
+    }
+  }
+
+  #temp only to output files
+  length(latin)
+  latin[is.na(latin)] <- ""
+  otext = readLines("Document 1",-1)
+  dir.create("Eplusmodels",showWarnings = FALSE)
+  writeLines(c(otext,latin),paste("Eplusmodels/temp",is,".idf",sep=""))
+}
